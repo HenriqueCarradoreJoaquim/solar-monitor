@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1720">
+<title>Solar</title>
+<style>
+  :root {
+    --bg:#f3f4f6; --card:#ffffff; --text:#14202b; --muted:#6b7785; --line:#e5e8ec;
+    --accent:#f59e0b; --accent-soft:#fde7b0; --good:#15803d; --bad:#b91c1c; --bar:#f5b73b; --bar-last:#e08a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1720; --card:#172230; --text:#e8edf2; --muted:#8a97a6; --line:#263446;
+            --accent:#fbbf24; --accent-soft:#4a3a12; --good:#4ade80; --bad:#f87171; --bar:#b7852a; --bar-last:#fbbf24; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
+  main { max-width: 720px; margin: 0 auto; display: grid; gap: 14px; }
+  header { display:flex; justify-content:space-between; align-items:center; }
+  h1 { font-size: 18px; margin:0; font-weight:600; }
+  .muted { color: var(--muted); font-size: 13px; }
+  button { font: inherit; cursor: pointer; }
+  .link { background:none; border:0; color:var(--muted); font-size:13px; text-decoration:underline; padding:4px; }
+  .card { background: var(--card); border:1px solid var(--line); border-radius: 16px; padding: 16px; }
+  .hero .label { color: var(--muted); font-size: 13px; }
+  .hero .big { font-size: 52px; font-weight: 700; line-height: 1.05; margin: 4px 0; letter-spacing: -1px; }
+  .hero .big small { font-size: 20px; font-weight: 500; color: var(--muted); letter-spacing: 0; margin-left: 4px; }
+  .delta { font-size: 14px; font-weight: 600; }
+  .delta.up { color: var(--good); } .delta.down { color: var(--bad); }
+  .stats { display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat { padding: 12px; }
+  .stat .v { font-size: 18px; font-weight: 650; margin-top: 2px; }
+  .card h2 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+  svg { width: 100%; height: auto; display:block; }
+  svg text { fill: var(--muted); font-size: 17px; font-family: inherit; }
+  .empty { color: var(--muted); font-size: 14px; padding: 24px 0; text-align:center; }
+  #login { position: fixed; inset:0; background: var(--bg); display:none; align-items:center; justify-content:center; padding:20px; }
+  #login form { width:100%; max-width:340px; display:grid; gap:12px; }
+  #login input { font: inherit; padding: 12px; border-radius: 10px; border:1px solid var(--line); background:var(--card); color:var(--text); }
+  #login .go { padding: 12px; border:0; border-radius:10px; background: var(--accent); color:#1b1300; font-weight:650; }
+  #err { color: var(--bad); font-size: 13px; min-height: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>☀️ Minha usina solar</h1>
+    <button class="link" id="logout" hidden>sair</button>
+  </header>
+
+  <section class="card hero">
+    <div class="label" id="date">Hoje</div>
+    <div class="big"><span id="kwh">—</span><small>kWh</small></div>
+    <div class="delta" id="delta"></div>
+    <div class="muted" id="split"></div>
+  </section>
+
+  <section class="stats">
+    <div class="card stat"><div class="muted">Potência agora</div><div class="v" id="power">—</div></div>
+    <div class="card stat"><div class="muted">Média 7 dias</div><div class="v" id="avg">—</div></div>
+    <div class="card stat"><div class="muted">Atualizado</div><div class="v" id="updated">—</div></div>
+  </section>
+
+  <section class="card">
+    <h2>Potência hoje</h2>
+    <div id="powerChart"></div>
+  </section>
+
+  <section class="card">
+    <h2>Últimos 30 dias (kWh)</h2>
+    <div id="barChart"></div>
+  </section>
+</main>
+
+<div id="login">
+  <form id="loginForm">
+    <h1>☀️ Minha usina solar</h1>
+    <span class="muted">Informe o token de acesso (API_TOKEN do servidor).</span>
+    <input id="tokenInput" type="password" placeholder="Token" autocomplete="current-password" required>
+    <div id="err"></div>
+    <button class="go" type="submit">Entrar</button>
+  </form>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const fmt = (n, d = 1) => (n == null ? '—' : Number(n).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d }));
+const store = {
+  get: (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
+  del: (k) => { try { localStorage.removeItem(k); } catch {} },
+};
+let token = store.get('solar_token');
+
+async function api(path) {
+  const res = await fetch(path, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+  if (res.status === 401) throw Object.assign(new Error('unauthorized'), { code: 401 });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
+function niceStep(raw) {
+  const p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const f = raw / p;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
+}
+const ddmm = (iso) => iso.slice(8, 10) + '/' + iso.slice(5, 7);
+
+function renderBars(rows, avg) {
+  const box = $('#barChart');
+  if (!rows.length) { box.innerHTML = '<div class="empty">Sem dados diários ainda.</div>'; return; }
+  const W = 640, H = 220, pl = 44, pr = 20, pt = 12, pb = 28;
+  const maxV = Math.max(1, ...rows.map((r) => r.kwh));
+  const step = niceStep(maxV / 4), top = Math.ceil(maxV / step) * step;
+  const iw = W - pl - pr, ih = H - pt - pb, bw = iw / rows.length;
+  const y = (v) => pt + ih - (v / top) * ih;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Geração diária dos últimos 30 dias">`;
+  for (let v = 0; v <= top + 1e-9; v += step) {
+    s += `<line x1="${pl}" x2="${W - pr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/>`;
+    s += `<text x="${pl - 4}" y="${y(v) + 3}" text-anchor="end">${fmt(v, 0)}</text>`;
+  }
+  rows.forEach((r, i) => {
+    const h = (r.kwh / top) * ih, x = pl + i * bw + bw * 0.12;
+    const last = i === rows.length - 1;
+    s += `<rect x="${x}" y="${pt + ih - h}" width="${bw * 0.76}" height="${Math.max(h, 0)}" rx="2" fill="${last ? 'var(--bar-last)' : 'var(--bar)'}"><title>${ddmm(r.date)}: ${fmt(r.kwh)} kWh</title></rect>`;
+    if (i % 5 === 0 || last && rows.length > 1 && (rows.length - 1) % 5 > 2) s += `<text x="${x + bw * 0.38}" y="${H - 8}" text-anchor="middle">${ddmm(r.date)}</text>`;
+  });
+  if (avg != null) s += `<line x1="${pl}" x2="${W - pr}" y1="${y(avg)}" y2="${y(avg)}" stroke="var(--accent)" stroke-dasharray="4 3"/>`;
+  box.innerHTML = s + '</svg>' + (avg != null ? '<div class="muted">Linha tracejada: média dos 7 dias anteriores a hoje</div>' : '');
+}
+
+function renderPower(rows) {
+  const box = $('#powerChart');
+  const pts = rows.map((r) => {
+    const d = new Date(r.ts);
+    return { h: d.getHours() + d.getMinutes() / 60, kw: (r.power_w || 0) / 1000 };
+  }).filter((p) => p.h >= 4 && p.h <= 21);
+  if (!pts.some((p) => p.kw > 0)) { box.innerHTML = '<div class="empty">Sem leituras de produção hoje.</div>'; return; }
+  const W = 640, H = 200, pl = 44, pr = 20, pt = 12, pb = 28, h0 = 5, h1 = 20;
+  const maxV = Math.max(...pts.map((p) => p.kw));
+  const step = niceStep(maxV / 4), top = Math.ceil(maxV / step) * step;
+  const iw = W - pl - pr, ih = H - pt - pb;
+  const x = (h) => pl + ((Math.min(Math.max(h, h0), h1) - h0) / (h1 - h0)) * iw;
+  const y = (v) => pt + ih - (v / top) * ih;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Potência ao longo do dia">`;
+  for (let v = 0; v <= top + 1e-9; v += step) {
+    s += `<line x1="${pl}" x2="${W - pr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/>`;
+    s += `<text x="${pl - 4}" y="${y(v) + 3}" text-anchor="end">${fmt(v, step < 1 ? 1 : 0)}</text>`;
+  }
+  for (let h = h0; h <= h1; h += 3) s += `<text x="${x(h)}" y="${H - 8}" text-anchor="middle">${h}h</text>`;
+  const line = pts.map((p, i) => (i ? 'L' : 'M') + x(p.h).toFixed(1) + ' ' + y(p.kw).toFixed(1)).join(' ');
+  s += `<path d="${line} L${x(pts[pts.length - 1].h).toFixed(1)} ${y(0)} L${x(pts[0].h).toFixed(1)} ${y(0)} Z" fill="var(--accent-soft)" opacity=".8"/>`;
+  s += `<path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`;
+  const pk = pts.reduce((a, b) => (b.kw > a.kw ? b : a));
+  s += `<circle cx="${x(pk.h)}" cy="${y(pk.kw)}" r="3.5" fill="var(--accent)"/>`;
+  box.innerHTML = s + `</svg><div class="muted">Pico: ${fmt(pk.kw, 2)} kW às ${String(Math.floor(pk.h)).padStart(2, '0')}:${String(Math.round((pk.h % 1) * 60)).padStart(2, '0')}</div>`;
+}
+
+function ago(ts) {
+  if (!ts) return '—';
+  const m = Math.round((Date.now() - ts) / 60000);
+  if (m < 1) return 'agora';
+  if (m < 60) return m + ' min';
+  const h = Math.floor(m / 60);
+  return h < 24 ? h + ' h' : Math.floor(h / 24) + ' d';
+}
+
+function renderToday(t) {
+  $('#date').textContent = 'Hoje · ' + t.date.split('-').reverse().join('/');
+  $('#kwh').textContent = fmt(t.kwh);
+  const d = $('#delta');
+  if (t.vsAvg7dPercent == null) { d.textContent = ''; d.className = 'delta'; }
+  else {
+    const up = t.vsAvg7dPercent >= 0;
+    d.textContent = (up ? '▲ +' : '▼ ') + fmt(t.vsAvg7dPercent, 1) + '% vs. média dos 7 dias';
+    d.className = 'delta ' + (up ? 'up' : 'down');
+  }
+  const nm = { INVERTER: 'Inversor', MICRO_INVERTER: 'Micro' };
+  $('#split').textContent = (t.devices || []).length > 1 ? t.devices.map((x) => (nm[x.type] || x.type) + ' ' + fmt(x.kwh) + ' kWh').join(' · ') : '';
+  $('#power').textContent = t.currentPowerW == null ? '—' : fmt(t.currentPowerW / 1000, 2) + ' kW';
+  $('#avg').textContent = t.avg7dKwh == null ? '—' : fmt(t.avg7dKwh) + ' kWh';
+  $('#updated').textContent = ago(t.lastReadingAt);
+}
+
+function showLogin(msg) {
+  $('#login').style.display = 'flex';
+  $('#err').textContent = msg || '';
+  $('#tokenInput').focus();
+}
+
+async function load() {
+  try {
+    const [today, days, power] = await Promise.all([api('/api/today'), api('/api/days?limit=30'), api('/api/power')]);
+    $('#login').style.display = 'none';
+    $('#logout').hidden = false;
+    renderToday(today);
+    renderBars(days, today.avg7dKwh);
+    renderPower(power);
+  } catch (e) {
+    if (e.code === 401) { token = ''; store.del('solar_token'); showLogin(token ? 'Token inválido.' : ''); }
+    else console.error(e);
+  }
+}
+
+$('#loginForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  token = $('#tokenInput').value.trim();
+  try {
+    await api('/api/today');
+    store.set('solar_token', token);
+    $('#tokenInput').value = '';
+    load();
+  } catch (e) {
+    showLogin(e.code === 401 ? 'Token inválido.' : 'Não consegui falar com o servidor.');
+  }
+});
+$('#logout').addEventListener('click', () => { store.del('solar_token'); token = ''; location.reload(); });
+
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>

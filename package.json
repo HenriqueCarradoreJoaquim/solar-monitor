@@ -1,0 +1,23 @@
+{
+  "name": "solar-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/index.js",
+    "dev": "node --watch --env-file-if-exists=.env src/index.js",
+    "discover": "node --env-file-if-exists=.env src/discover.js",
+    "collect": "node --env-file-if-exists=.env src/collect-once.js",
+    "report": "node --env-file-if-exists=.env src/send-report.js",
+    "backfill": "node --env-file-if-exists=.env src/backfill.js",
+    "forecast": "node --env-file-if-exists=.env src/forecast-now.js",
+    "history": "node --env-file-if-exists=.env src/discover-history.js"
+  },
+  "dependencies": {
+    "fastify": "^5.0.0",
+    "node-cron": "^3.0.3"
+  }
+}
