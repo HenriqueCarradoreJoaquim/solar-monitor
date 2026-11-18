@@ -2,12 +2,6 @@
 
 Monitor pessoal de energia solar. Coleta os dados da **SOLARMAN OpenAPI**, guarda o histórico em **SQLite** e manda pelo **Telegram** um relatório diário, a previsão de geração do dia seguinte e alertas quando algo para ou rende abaixo do esperado. Tem também um painel web leve para acompanhar pelo celular.
 
-<p align="center">
-  <img src="docs/telegram-relatorio.png" alt="Relatório diário no Telegram" width="30%">
-  <img src="docs/painel.png" alt="Painel web" width="30%">
-  <img src="docs/comparativo.png" alt="App do fabricante x total somado pelo solar-monitor" width="30%">
-</p>
-
 ## Por que existe
 
 O app do fabricante mostra os números, mas não responde à pergunta que eu mais fazia: *"está tudo certo com as minhas placas?"*. Este projeto responde isso sozinho: resume o dia, prevê o seguinte e avisa quando algo foge do normal.
