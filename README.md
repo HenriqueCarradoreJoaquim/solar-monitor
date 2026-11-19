@@ -1,4 +1,4 @@
-# ☀️ solar-monitor
+#solar-monitor
 
 Monitor pessoal de energia solar. Coleta os dados da **SOLARMAN OpenAPI**, guarda o histórico em **SQLite** e manda pelo **Telegram** um relatório diário, a previsão de geração do dia seguinte e alertas quando algo para ou rende abaixo do esperado. Tem também um painel web leve para acompanhar pelo celular.
 
