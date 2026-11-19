@@ -1,6 +1,7 @@
 import { db } from './db.js';
 import { config, dateInTz } from './config.js';
 import { getWeather, expectedForDate } from './weather.js';
+import { isDayComplete } from './completeness.js';
 
 const nf = (n, d = 1) =>
   n == null ? '—' : Number(n).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -40,6 +41,7 @@ export function getReportData(date = dateInTz(0)) {
     date,
     kwh,
     devices,
+    incomplete: isDayComplete(date) === false,
     yesterday,
     avg7,
     vsYesterday: pct(kwh, yesterday),
@@ -59,6 +61,7 @@ export function formatReport(d) {
     '',
     `⚡ Geração hoje: ${nf(d.kwh)} kWh`,
   ];
+  if (d.incomplete) lines.push('     ⚠️ total possivelmente incompleto: faltam dados de algum equipamento');
   if (d.devices?.length > 1) {
     const name = { INVERTER: 'Inversor', MICRO_INVERTER: 'Micro' };
     lines.push(`     ${d.devices.map((x) => `${name[x.type] ?? x.type} ${nf(x.kwh)}`).join(' · ')}`);

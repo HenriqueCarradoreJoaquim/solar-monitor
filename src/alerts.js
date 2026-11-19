@@ -2,6 +2,7 @@ import { db, kvGet, kvSet } from './db.js';
 import { config, localNow } from './config.js';
 import { sendMessage } from './telegram.js';
 import { getWeather, currentRadiation, expectedForDate } from './weather.js';
+import { isDayComplete } from './completeness.js';
 
 const nf = (n, d = 1) => Number(n).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
 const LABEL = { INVERTER: 'Inversor', MICRO_INVERTER: 'Microinversor' };
@@ -81,16 +82,27 @@ export async function runAlerts({ at = new Date() } = {}) {
   }
 
   // 4) Fim do dia: geração muito abaixo do esperado para a radiação que houve
+  //    (só compara com o dia COMPLETO: antes, reconcilia com o histórico oficial de cada equipamento)
   if (wx && now.hour >= 19.5 && now.hour < 23 && kvGet('low_checked') !== now.date) {
-    const row = db.prepare('SELECT kwh FROM daily WHERE date = ?').get(now.date);
-    if (row) {
-      kvSet('low_checked', now.date);
-      const e = expectedForDate(wx, now.date);
-      if (e?.kwh != null && e.kwh >= 3 && row.kwh < 0.6 * e.kwh) {
-        await notify(
-          `⚠️ Geração abaixo do esperado hoje: ${nf(row.kwh)} kWh, contra ~${nf(e.kwh)} kWh esperados para a radiação do dia (faixa ${nf(e.low)}–${nf(e.high)}).\n` +
-          'Se isso se repetir em dias de sol, vale checar sujeira, sombra ou o inversor.'
-        );
+    if (db.prepare('SELECT 1 AS x FROM daily WHERE date = ?').get(now.date)) {
+      try {
+        const { backfillDevices } = await import('./collector.js');
+        await backfillDevices(2);
+      } catch (e) {
+        console.error('[alerta] não consegui reconciliar o dia:', e.message);
+      }
+      if (isDayComplete(now.date) === false) {
+        console.log('[alerta] total do dia incompleto (falta equipamento); comparação adiada');
+      } else {
+        kvSet('low_checked', now.date);
+        const row = db.prepare('SELECT kwh FROM daily WHERE date = ?').get(now.date);
+        const e = expectedForDate(wx, now.date);
+        if (row && e?.kwh != null && e.kwh >= 3 && row.kwh < 0.6 * e.kwh) {
+          await notify(
+            `⚠️ Geração abaixo do esperado hoje: ${nf(row.kwh)} kWh, contra ~${nf(e.kwh)} kWh esperados para a radiação do dia (faixa ${nf(e.low)}–${nf(e.high)}).\n` +
+            'Se isso se repetir em dias de sol, vale checar sujeira, sombra ou o inversor.'
+          );
+        }
       }
     }
   }

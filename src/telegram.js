@@ -17,10 +17,21 @@ async function api(method, body = {}, timeoutMs = 15000) {
   return json.result;
 }
 
+/** Reconcilia os últimos dias com o histórico oficial de cada equipamento (corrige lacunas, ex.: PC desligado). */
+async function heal(days = 2) {
+  try {
+    const { backfillDevices } = await import('./collector.js');
+    await backfillDevices(days);
+  } catch (e) {
+    console.error('[telegram] reconciliação falhou:', e.message);
+  }
+}
+
 export const sendMessage = (text, to = chatId) => api('sendMessage', { chat_id: to, text });
 
 export async function sendDailyReport() {
   if (!token || !chatId) throw new Error('Defina TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID no .env');
+  await heal();
   return sendMessage(await buildReport());
 }
 
@@ -36,7 +47,10 @@ async function handle(msg) {
   if (!chatId) return sendMessage('Defina TELEGRAM_CHAT_ID no .env primeiro (use /id).', from);
   if (from !== String(chatId)) return; // ignora qualquer outra pessoa
 
-  if (cmd === '/hoje' || cmd === '/relatorio') return sendMessage(await buildReport(), from);
+  if (cmd === '/hoje' || cmd === '/relatorio') {
+    await heal();
+    return sendMessage(await buildReport(), from);
+  }
   if (cmd === '/semana') return sendMessage(weekSummary(), from);
   if (cmd === '/status') return sendMessage(buildStatus(), from);
   if (cmd === '/previsao' || cmd === '/previsão') {

@@ -179,7 +179,7 @@ function renderToday(t) {
     d.className = 'delta ' + (up ? 'up' : 'down');
   }
   const nm = { INVERTER: 'Inversor', MICRO_INVERTER: 'Micro' };
-  $('#split').textContent = (t.devices || []).length > 1 ? t.devices.map((x) => (nm[x.type] || x.type) + ' ' + fmt(x.kwh) + ' kWh').join(' · ') : '';
+  $('#split').textContent = t.incomplete ? '⚠️ total pode estar incompleto (faltam dados de um equipamento)' : (t.devices || []).length > 1 ? t.devices.map((x) => (nm[x.type] || x.type) + ' ' + fmt(x.kwh) + ' kWh').join(' · ') : '';
   $('#power').textContent = t.currentPowerW == null ? '—' : fmt(t.currentPowerW / 1000, 2) + ' kW';
   $('#avg').textContent = t.avg7dKwh == null ? '—' : fmt(t.avg7dKwh) + ' kWh';
   $('#updated').textContent = ago(t.lastReadingAt);

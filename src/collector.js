@@ -220,7 +220,8 @@ export function startCollector() {
   const deviceDays = db.prepare('SELECT COUNT(DISTINCT date) AS n FROM device_daily').get().n;
   (async () => {
     if (stationRows < 14) await backfillMonths(2).catch((e) => console.error('[histórico] usina:', e.message));
-    if (deviceDays < 14) await backfillDevices(90).catch((e) => console.error('[histórico] equipamentos:', e.message));
+    // Ao iniciar, sempre reconcilia a última semana (cobre períodos em que o programa ficou desligado)
+    await backfillDevices(deviceDays < 14 ? 90 : 7).catch((e) => console.error('[histórico] equipamentos:', e.message));
     run();
   })();
   cron.schedule(config.collectCron, run, { timezone: config.timezone });

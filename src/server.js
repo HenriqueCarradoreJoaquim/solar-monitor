@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import fs from 'node:fs';
 import { db } from './db.js';
 import { config, dateInTz } from './config.js';
+import { isDayComplete } from './completeness.js';
 
 export function buildServer() {
   const app = Fastify({ logger: false });
@@ -39,6 +40,7 @@ export function buildServer() {
       date: today,
       kwh,
       devices,
+      incomplete: isDayComplete(today) === false,
       currentPowerW: last?.power_w ?? null,
       lastReadingAt: last?.ts ?? null,
       avg7dKwh: avg7,
